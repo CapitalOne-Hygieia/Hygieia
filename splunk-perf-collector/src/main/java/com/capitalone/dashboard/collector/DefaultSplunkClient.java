@@ -43,6 +43,40 @@ public class DefaultSplunkClient implements SplunkClient {
     private final SplunkSettings settings;
     private final RestOperations rest;
 
+    /* Example .conf file: (could maybe just sync up with hygieiea settings?)
+        [Too Many Errors Today]
+        # send an email notification
+        action.email = 1
+        action.email.message.alert = The alert condition for '$name$' in the $app$ fired with $job.resultCount$ error events.
+        action.email.to = address@example.com
+        action.email.useNSSubject = 1
+
+        alert.suppress = 0
+        alert.track = 0
+
+        counttype = number of events
+        quantity = 5
+        relation = greater than
+
+        # run every day at 14:00
+        cron_schedule = 0 14 * * *
+
+        #search for results in the last day
+        dispatch.earliest_time = -1d
+        dispatch.latest_time = now
+
+        display.events.fields = ["host","source","sourcetype","latitude"]
+        display.page.search.mode = verbose
+        display.visualizations.charting.chart = area
+        display.visualizations.type = mapping
+
+        enableSched = 1
+
+        request.ui_dispatch_app = search
+        request.ui_dispatch_view = search
+        search = index=_internal " error " NOT debug source=*splunkd.log* earliest=-7d latest=now
+        disabled = 1
+     */
 
     @Autowired
     public DefaultSplunkClient(SplunkSettings settings, Supplier<RestOperations> restOperationsSupplier) {
@@ -109,192 +143,22 @@ public class DefaultSplunkClient implements SplunkClient {
         return returnSet;
     }
 
+    @Override
+    public List<PerformanceMetric> getPerformanceMetrics(SplunkApplication application) {
+        return null;
+    }
+
     /**
      * Obtains the relevant data via different Splunk api calls.
      *
      * @param application the current application. Used to provide access to appID/name
      * @return List of PerformanceMetrics used to populate the performance database
-     */
-    @Override
+55    @Override
     public List<PerformanceMetric> getPerformanceMetrics(SplunkApplication application) {
-        List<PerformanceMetric> metrics = new ArrayList<>();
 
-        metrics.addAll(getOverallMetrics(application));
-        metrics.addAll(getCalculatedMetrics(metrics));
-        metrics.addAll(getHealthMetrics(application));
-        metrics.addAll(getViolations(application));
-        metrics.addAll(getSeverityMetrics(application));
-
-        return metrics;
+        return null;
     }
 
-    /**
-     * Obtains the "Overall Application Performance" metrics for the current application from Splunk
-     * e.g. /controller/#/location=METRIC_BROWSER&timeRange=last_15_minutes.BEFORE_NOW.-1.-1.15&application=<APPID>
-     * Currently used by the UI: calls per minute, errors per minute, average response time
-     * @param application the current application. Used to provide access to appID/name
-     * @return List of PerformanceMetrics used to populate the performance database
-     */
-    private List<PerformanceMetric> getOverallMetrics(SplunkApplication application) {
-        List<PerformanceMetric> overallMetrics = new ArrayList<>();
-        try {
-            String url = joinURL(settings.getInstanceUrl(), String.format(OVERALL_METRIC_PATH, application.getAppID(), URLEncoder.encode(OVERALL_SUFFIX, "UTF-8"), String.valueOf(settings.getTimeWindow())));
-            ResponseEntity<String> responseEntity = makeRestCall(url);
-            String returnJSON = responseEntity.getBody();
-            JSONParser parser = new JSONParser();
-
-            try {
-                JSONArray array = (JSONArray) parser.parse(returnJSON);
-
-                for (Object entry : array) {
-                    JSONObject jsonEntry = (JSONObject) entry;
-                    String metricPath = getString(jsonEntry, "metricPath");
-                    JSONObject mObj = (JSONObject) getJsonArray(jsonEntry, "metricValues").get(0);
-                    Long metricValue = getLong(mObj, "value");
-
-                    PerformanceMetric metric = new PerformanceMetric();
-                    metric.setName(parseMetricName(metricPath));
-                    metric.setValue(metricValue);
-                    overallMetrics.add(metric);
-                }
-            } catch (ParseException | RestClientException e) {
-                LOG.error("Parsing metrics for : " + settings.getInstanceUrl() + ". Application =" + application.getAppName(), e);
-            }
-        } catch (MalformedURLException | UnsupportedEncodingException mfe) {
-            LOG.error("malformed url for loading jobs", mfe);
-        }
-        return overallMetrics;
-    }
-
-    /**
-     * Some metrics are not immediately available (e.g. Total Calls, Total Errors). We need to calculate them.
-     *
-     * @param metrics the already-populated list of metrics. We use this data to calculate new values.
-     * @return List of PerformanceMetrics used to populate the performance database
-     */
-    private List<PerformanceMetric> getCalculatedMetrics(List<PerformanceMetric> metrics) {
-
-        long errorsPerMinVal = 0;
-        long callsPerMinVal = 0;
-        List<PerformanceMetric> calculatedMetrics = new ArrayList<>();
-        for (PerformanceMetric cm : metrics) {
-            if (cm.getName().equals("Errors per Minute")) {
-                errorsPerMinVal = (long) cm.getValue();
-            }
-            if (cm.getName().equals("Calls per Minute")) {
-                callsPerMinVal = (long) cm.getValue();
-            }
-        }
-
-        // Total Errors
-        PerformanceMetric metric = new PerformanceMetric();
-        metric.setName("Total Errors");
-        // Right now the timeframe is hard-coded to 15 min. Change this if that changes.
-        metric.setValue(errorsPerMinVal * 15);
-        calculatedMetrics.add(metric);
-
-        // Total Calls
-        metric = new PerformanceMetric();
-        metric.setName("Total Calls");
-        // Right now the timeframe is hard-coded to 15 min. Change this if that changes.
-        metric.setValue(callsPerMinVal * 15);
-        calculatedMetrics.add(metric);
-
-
-        return calculatedMetrics;
-    }
-
-    /**
-     * Calculates the Node Health Percent and Business Health Percent values
-     * @param application the current application. Used to provide access to appID/name
-     * @return List of two PerformanceMetrics that contain info about the health percents
-     */
-    private List<PerformanceMetric> getHealthMetrics(SplunkApplication application) {
-        // business health percent
-        long numNodeViolations = 0;
-        long numBusinessViolations = 0;
-        long numNodes = 0;
-        long numBusinessTransactions = 0;
-        double nodeHealthPercent = 0.0;
-        double businessHealthPercent = 0.0;
-
-        List<PerformanceMetric> healthMetrics = new ArrayList<>();
-
-        try {
-            // GET NUMBER OF VIOLATIONS OF EACH TYPE
-            String url = joinURL(settings.getInstanceUrl(), String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
-            ResponseEntity<String> responseEntity = makeRestCall(url);
-            String returnJSON = responseEntity.getBody();
-            JSONParser parser = new JSONParser();
-
-            JSONArray array = (JSONArray) parser.parse(returnJSON);
-
-            for (Object entry : array) {
-
-                JSONObject jsonEntry = (JSONObject) entry;
-
-                if (getString(jsonEntry, "incidentStatus").equals("RESOLVED"))
-                    continue;
-
-                JSONObject affEntityObj = (JSONObject) jsonEntry.get("affectedEntityDefinition");
-
-                String entityType = getString(affEntityObj, "entityType");
-
-                if (entityType.equals("APPLICATION_COMPONENT_NODE")) {
-                    numNodeViolations++;
-
-                } else if (entityType.equals("BUSINESS_TRANSACTION")) {
-                    numBusinessViolations++;
-
-                }
-            }
-
-
-            // GET NUMBER OF NODES
-            url = joinURL(settings.getInstanceUrl(), String.format(NODE_LIST_PATH, application.getAppID()));
-            responseEntity = makeRestCall(url);
-            returnJSON = responseEntity.getBody();
-            parser = new JSONParser();
-            array = (JSONArray) parser.parse(returnJSON);
-
-            numNodes = array.size();
-
-            // GET NUMBER OF BUSINESS TRANSACTIONS
-            url = joinURL(settings.getInstanceUrl(), String.format(BUSINESS_TRANSACTION_LIST_PATH, application.getAppID()));
-            responseEntity = makeRestCall(url);
-            returnJSON = responseEntity.getBody();
-            parser = new JSONParser();
-            array = (JSONArray) parser.parse(returnJSON);
-
-            numBusinessTransactions = array.size();
-
-        } catch (MalformedURLException e) {
-            LOG.error("client exception loading applications", e);
-        } catch (ParseException e) {
-            LOG.error("client exception loading applications", e);
-        }
-
-        // Node health percent is just 1 - (num node violations / num nodes)
-        if (numNodes != 0)
-            nodeHealthPercent = Math.floor(100.0 * (1.0 - ((double) (numNodeViolations) / (double) (numNodes)))) / 100.0;
-
-        PerformanceMetric metric = new PerformanceMetric();
-        metric.setName("Node Health Percent");
-        // Right now the timeframe is hard-coded to 15 min. Change this if that changes.
-        metric.setValue(nodeHealthPercent);
-        healthMetrics.add(metric);
-
-        // Business health percent is just 1 - (num business transaction violations / num business transactions)
-        if (numBusinessTransactions != 0)
-            businessHealthPercent = Math.floor(100.0 * (1.0 - ((double) (numBusinessViolations) / (double) (numBusinessTransactions)))) / 100.0;
-
-        metric = new PerformanceMetric();
-        metric.setName("Business Transaction Health Percent");
-        metric.setValue(businessHealthPercent);
-        healthMetrics.add(metric);
-
-        return healthMetrics;
-    }
 
     /**
      * Obtains a list of health violations for the current application from Splunk
@@ -330,24 +194,10 @@ public class DefaultSplunkClient implements SplunkClient {
 
     }
 
-    /**
-     * Calculates the response time and error rate severities.
-     * 0: good, 1: warning, 2: critical
-     * Iterates through list of violations. The final severity will be the highest of them all
-     * (e.g. response time violations are Warning, Critical, Warning, Warning, Warning -> Critical)
-     *
-     * @param application the current application. Used to provide access to appID/name
-     * @return List of two PerformanceMetrics that contain info about the severities
-     */
-    private List<PerformanceMetric> getSeverityMetrics(SplunkApplication application) {
 
-        long responseTimeSeverity = 0;
-        long errorRateSeverity = 0;
+  /*  private List<PerformanceMetric> getSeverityMetrics(SplunkApplication application) {
 
-        List<PerformanceMetric> severityMetrics = new ArrayList<>();
-
-        try {
-            // NUMBER OF VIOLATIONS
+     /*
             String url = joinURL(settings.getInstanceUrl(), String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
             ResponseEntity<String> responseEntity = makeRestCall(url);
             String returnJSON = responseEntity.getBody();
@@ -356,50 +206,12 @@ public class DefaultSplunkClient implements SplunkClient {
             JSONArray array = (JSONArray) parser.parse(returnJSON);
 
 
-            for (Object entry : array) {
-                JSONObject jsonEntry = (JSONObject) entry;
-                JSONObject affEntityObj = (JSONObject) jsonEntry.get("affectedEntityDefinition");
-
-                String entityType = getString(affEntityObj, "entityType");
-
-
-                if (entityType.equals("BUSINESS_TRANSACTION")) {
-
-                    long severity = getString(jsonEntry, "severity").equals("CRITICAL") ? 2 : 1;
-
-                    if (getString(jsonEntry, "name").equals("Business Transaction error rate is much higher than normal")) {
-                        errorRateSeverity = Math.max(errorRateSeverity, severity);
-                    } else if (getString(jsonEntry, "name").equals("Business Transaction response time is much higher than normal")) {
-                        responseTimeSeverity = Math.max(responseTimeSeverity, severity);
-                    }
-                }
-            }
-        } catch (MalformedURLException e) {
-            LOG.error("client exception loading applications", e);
-        } catch (ParseException e) {
-            LOG.error("client exception loading applications", e);
-        }
-
-        PerformanceMetric metric = new PerformanceMetric();
-        metric.setName("Error Rate Severity");
-        metric.setValue(errorRateSeverity);
-        severityMetrics.add(metric);
-
-        metric = new PerformanceMetric();
-        metric.setName("Response Time Severity");
-        metric.setValue(responseTimeSeverity);
-        severityMetrics.add(metric);
-
 
         return severityMetrics;
 
     }
+    */
 
-    private String parseMetricName(String metricPath) {
-        String[] arr = metricPath.split(METRIC_PATH_DELIMITER);
-        if (arr == null) return "";
-        return arr[arr.length - 1];
-    }
 
     protected ResponseEntity<String> makeRestCall(String sUrl) throws MalformedURLException {
         URI thisuri = URI.create(sUrl);
