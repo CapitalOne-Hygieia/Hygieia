@@ -3,9 +3,9 @@ package com.capitalone.dashboard.collector;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-
+//ConfigurationProperties means to find splunk.properties, and populate these values if specified <3
 @Component
-@ConfigurationProperties(prefix = "Splunk")
+@ConfigurationProperties(prefix = "splunk")
 public class SplunkSettings {
     private String username;
     private String password;
@@ -13,7 +13,17 @@ public class SplunkSettings {
     private String instanceUrl;
     private String cron;
     private String dashboardUrl;
-    private Integer timeWindow = 15; //default to 15 minutes
+    private String searchesPath;
+
+
+
+    public String getSearchesPath() {
+        return searchesPath;
+    }
+
+    public void setSearchesPath(String searchesPath) {
+        this.searchesPath = searchesPath;
+    }
 
 
     public String getAccount() {
@@ -69,11 +79,4 @@ public class SplunkSettings {
         this.dashboardUrl = dashboardUrl;
     }
 
-    public Integer getTimeWindow() {
-        return timeWindow;
-    }
-
-    public void setTimeWindow(Integer timeWindow) {
-        this.timeWindow = timeWindow;
-    }
 }

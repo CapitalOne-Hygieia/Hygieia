@@ -40,3 +40,4 @@ logs
 application.properties
 /dashboard.properties
 
+/appdynamics-perf-collector/src/main/resources/appdynamics.properties

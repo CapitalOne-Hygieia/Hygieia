@@ -1,14 +1,10 @@
 package com.capitalone.dashboard.collector;
 
-import com.capitalone.dashboard.model.SplunkApplication;
-import com.capitalone.dashboard.model.SplunkCollector;
-import com.capitalone.dashboard.model.Performance;
-import com.capitalone.dashboard.model.PerformanceMetric;
-import com.capitalone.dashboard.model.PerformanceType;
-import com.capitalone.dashboard.repository.SplunkApplicationRepository;
-import com.capitalone.dashboard.repository.SplunkCollectorRepository;
+import com.capitalone.dashboard.model.*;
 import com.capitalone.dashboard.repository.BaseCollectorRepository;
 import com.capitalone.dashboard.repository.PerformanceRepository;
+import com.capitalone.dashboard.repository.SplunkCollectorRepository;
+import com.capitalone.dashboard.repository.SplunkSearchRepository;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.TaskScheduler;
@@ -25,8 +21,8 @@ public class SplunkCollectorTask extends CollectorTask<SplunkCollector> {
 
 
     private final SplunkCollectorRepository SplunkCollectorRepository;
-    private final SplunkApplicationRepository SplunkApplicationRepository;
-    private final PerformanceRepository performanceRepository;
+    private final SplunkSearchRepository SplunkSearchRepository;
+    private final PerformanceRepository performanceRepository; //TODO: performance or nah?
     private final SplunkClient SplunkClient;
     private final SplunkSettings SplunkSettings;
 
@@ -36,13 +32,13 @@ public class SplunkCollectorTask extends CollectorTask<SplunkCollector> {
     @Autowired
     public SplunkCollectorTask(TaskScheduler taskScheduler,
                                SplunkCollectorRepository SplunkCollectorRepository,
-                               SplunkApplicationRepository SplunkApplicationRepository,
+                               SplunkSearchRepository SplunkSearchRepository,
                                PerformanceRepository performanceRepository,
                                SplunkSettings SplunkSettings,
                                SplunkClient SplunkClient) {
         super(taskScheduler, "Splunk");
         this.SplunkCollectorRepository = SplunkCollectorRepository;
-        this.SplunkApplicationRepository = SplunkApplicationRepository;
+        this.SplunkSearchRepository = SplunkSearchRepository;
         this.performanceRepository = performanceRepository;
         this.SplunkSettings = SplunkSettings;
         this.SplunkClient = SplunkClient;
@@ -69,17 +65,17 @@ public class SplunkCollectorTask extends CollectorTask<SplunkCollector> {
         long start = System.currentTimeMillis();
         Set<ObjectId> udId = new HashSet<>();
         udId.add(collector.getId());
-        List<SplunkApplication> existingApps = SplunkApplicationRepository.findByCollectorIdIn(udId);
-        List<SplunkApplication> latestProjects = new ArrayList<>();
+        List<SplunkSearch> existingApps = SplunkSearchRepository.findByCollectorIdIn(udId);
+        List<SplunkSearch> latestProjects = new ArrayList<>();
 
         logBanner(collector.getInstanceUrl());
 
-        Set<SplunkApplication> apps = SplunkClient.getApplications();
+        Set<SplunkSearch> apps = SplunkClient.getSearches();
         latestProjects.addAll(apps);
 
         log("Fetched applications   " + ((apps != null) ? apps.size() : 0), start);
 
-        addNewProjects(apps, existingApps, collector);
+        addNewSearches(apps, existingApps, collector);
 
         refreshData(enabledApplications(collector));
 
@@ -90,11 +86,11 @@ public class SplunkCollectorTask extends CollectorTask<SplunkCollector> {
 
 
 
-    private void refreshData(List<SplunkApplication> apps) {
+    private void refreshData(List<SplunkSearch> apps) {
         long start = System.currentTimeMillis();
         int count = 0;
 
-        for (SplunkApplication app : apps) {
+        for (SplunkSearch app : apps) {
             List<PerformanceMetric> metrics = SplunkClient.getPerformanceMetrics(app);
 
             if (!CollectionUtils.isEmpty(metrics)) {
@@ -112,18 +108,18 @@ public class SplunkCollectorTask extends CollectorTask<SplunkCollector> {
         log("Updated", start, count);
     }
 
-    private List<SplunkApplication> enabledApplications(SplunkCollector collector) {
-//        return SplunkApplicationRepository.findEnabledSplunkApplications(collector.getId());
-        return  SplunkApplicationRepository.findByCollectorIdAndEnabled(collector.getId(), true);
+    private List<SplunkSearch> enabledApplications(SplunkCollector collector) {
+//        return SplunkSearchRepository.findEnabledSplunkSearchs(collector.getId());
+        return  SplunkSearchRepository.findByCollectorIdAndEnabled(collector.getId(), true);
     }
 
 
-    private void addNewProjects(Set<SplunkApplication> allApps, List<SplunkApplication> exisingApps, SplunkCollector collector) {
+    private void addNewSearches(Set<SplunkSearch> allApps, List<SplunkSearch> exisingApps, SplunkCollector collector) {
         long start = System.currentTimeMillis();
         int count = 0;
-        Set<SplunkApplication> newApps = new HashSet<>();
+        Set<SplunkSearch> newApps = new HashSet<>();
 
-        for (SplunkApplication app : allApps) {
+        for (SplunkSearch app : allApps) {
             if (!exisingApps.contains(app)) {
                 app.setCollectorId(collector.getId());
                 app.setAppDashboardUrl(String.format(SplunkSettings.getDashboardUrl(),app.getAppID()));
@@ -134,13 +130,13 @@ public class SplunkCollectorTask extends CollectorTask<SplunkCollector> {
         }
         //save all in one shot
         if (!CollectionUtils.isEmpty(newApps)) {
-            SplunkApplicationRepository.save(newApps);
+            SplunkSearchRepository.save(newApps);
         }
         log("New appplications: ", start, count);
     }
 
-    private boolean isNewPerformanceData(SplunkApplication SplunkApplication, Performance performance) {
+    private boolean isNewPerformanceData(SplunkSearch SplunkSearch, Performance performance) {
         return performanceRepository.findByCollectorItemIdAndTimestamp(
-                SplunkApplication.getId(), performance.getTimestamp()) == null;
+                SplunkSearch.getId(), performance.getTimestamp()) == null;
     }
 }

@@ -1,15 +1,12 @@
 package com.capitalone.dashboard.collector;
 
-import com.capitalone.dashboard.model.SplunkApplication;
-import com.capitalone.dashboard.model.PerformanceMetric;
+import com.capitalone.dashboard.model.SplunkSearch;
 
-import java.util.List;
+import java.io.IOException;
 import java.util.Set;
 
 public interface SplunkClient {
 
-    //List<SplunkApplication> getApplications(String server);
-    Set<SplunkApplication> getApplications();
+    Set<SplunkSearch> getSearches() throws IOException;
 
-    List<PerformanceMetric> getPerformanceMetrics(SplunkApplication application);
 }
