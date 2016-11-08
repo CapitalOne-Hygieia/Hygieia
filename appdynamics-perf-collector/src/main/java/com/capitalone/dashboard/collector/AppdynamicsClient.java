@@ -9,7 +9,7 @@ import java.util.Set;
 public interface AppdynamicsClient {
 
     //List<AppdynamicsApplication> getApplications(String server);
-    Set<AppdynamicsApplication> getApplications();
+    Set<AppdynamicsApplication> getApplications(String instanceURL);
 
-    List<PerformanceMetric> getPerformanceMetrics(AppdynamicsApplication application);
+    List<PerformanceMetric> getPerformanceMetrics(AppdynamicsApplication application, String instanceUrl);
 }

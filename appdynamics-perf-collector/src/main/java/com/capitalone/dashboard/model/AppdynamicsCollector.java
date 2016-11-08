@@ -2,6 +2,8 @@ package com.capitalone.dashboard.model;
 
 import com.capitalone.dashboard.collector.AppdynamicsSettings;
 
+import java.util.List;
+
 /**
  * Collector implementation for Feature that stores system configuration
  * settings required for source system data connection (e.g., API tokens, etc.)
@@ -9,14 +11,14 @@ import com.capitalone.dashboard.collector.AppdynamicsSettings;
  * @author pxd338
  */
 public class AppdynamicsCollector extends Collector {
-    private String instanceUrl;
+    private List<String> instanceUrls;
 
-    public String getInstanceUrl() {
-        return instanceUrl;
+    public List<String> getInstanceUrls() {
+        return instanceUrls;
     }
 
-    public void setInstanceUrl(String instanceUrl) {
-        this.instanceUrl = instanceUrl;
+    public void setInstanceUrl(List<String> instanceUrls) {
+        this.instanceUrls = instanceUrls;
     }
 
     /**
@@ -34,7 +36,7 @@ public class AppdynamicsCollector extends Collector {
         protoType.setOnline(true);
         protoType.setEnabled(true);
         protoType.setLastExecuted(System.currentTimeMillis());
-        protoType.setInstanceUrl(settings.getInstanceUrl());
+        protoType.setInstanceUrl(settings.getInstanceUrls());
         return protoType;
     }
 }

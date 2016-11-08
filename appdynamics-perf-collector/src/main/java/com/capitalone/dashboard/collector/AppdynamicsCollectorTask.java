@@ -72,17 +72,21 @@ public class AppdynamicsCollectorTask extends CollectorTask<AppdynamicsCollector
         List<AppdynamicsApplication> existingApps = appDynamicsApplicationRepository.findByCollectorIdIn(udId);
         List<AppdynamicsApplication> latestProjects = new ArrayList<>();
 
-        logBanner(collector.getInstanceUrl());
+        List<String> instanceURLs = collector.getInstanceUrls();
 
-        Set<AppdynamicsApplication> apps = appdynamicsClient.getApplications();
-        latestProjects.addAll(apps);
+        for (String instanceURL : instanceURLs) {
 
-        log("Fetched applications   " + ((apps != null) ? apps.size() : 0), start);
+            logBanner(instanceURL);
 
-        addNewProjects(apps, existingApps, collector);
+            Set<AppdynamicsApplication> apps = appdynamicsClient.getApplications(instanceURL);
+            latestProjects.addAll(apps);
 
-        refreshData(enabledApplications(collector));
+            log("Fetched applications   " + ((apps != null) ? apps.size() : 0), start);
 
+            addNewProjects(apps, existingApps, collector, instanceURL);
+
+            refreshData(enabledApplications(collector), instanceURL);
+        }
 
         log("Finished", start);
     }
@@ -90,19 +94,19 @@ public class AppdynamicsCollectorTask extends CollectorTask<AppdynamicsCollector
 
 
 
-    private void refreshData(List<AppdynamicsApplication> apps) {
+    private void refreshData(List<AppdynamicsApplication> apps, String instanceURL) {
         long start = System.currentTimeMillis();
         int count = 0;
 
         for (AppdynamicsApplication app : apps) {
-            List<PerformanceMetric> metrics = appdynamicsClient.getPerformanceMetrics(app);
+            List<PerformanceMetric> metrics = appdynamicsClient.getPerformanceMetrics(app, instanceURL);
 
             if (!CollectionUtils.isEmpty(metrics)) {
                 Performance performance = new Performance();
                 performance.setCollectorItemId(app.getId());
                 performance.setTimestamp(System.currentTimeMillis());
                 performance.setType(PerformanceType.ApplicationPerformance);
-                performance.getMetrics().addAll(metrics);
+                performance.getInstances().put(instanceURL, new HashSet<>(metrics));
                 if (isNewPerformanceData(app, performance)) {
                     performanceRepository.save(performance);
                     count++;
@@ -118,7 +122,7 @@ public class AppdynamicsCollectorTask extends CollectorTask<AppdynamicsCollector
     }
 
 
-    private void addNewProjects(Set<AppdynamicsApplication> allApps, List<AppdynamicsApplication> exisingApps, AppdynamicsCollector collector) {
+    private void addNewProjects(Set<AppdynamicsApplication> allApps, List<AppdynamicsApplication> exisingApps, AppdynamicsCollector collector, String instanceURL) {
         long start = System.currentTimeMillis();
         int count = 0;
         Set<AppdynamicsApplication> newApps = new HashSet<>();
@@ -126,7 +130,7 @@ public class AppdynamicsCollectorTask extends CollectorTask<AppdynamicsCollector
         for (AppdynamicsApplication app : allApps) {
             if (!exisingApps.contains(app)) {
                 app.setCollectorId(collector.getId());
-                app.setAppDashboardUrl(String.format(appdynamicsSettings.getDashboardUrl(),app.getAppID()));
+                app.setAppDashboardUrl(String.format(appdynamicsSettings.getDashboardUrl(instanceURL),app.getAppID()));
                 app.setEnabled(false);
                 newApps.add(app);
                 count++;

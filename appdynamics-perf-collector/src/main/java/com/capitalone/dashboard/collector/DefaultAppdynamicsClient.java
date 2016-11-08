@@ -70,10 +70,10 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
      * later used by the front end to populate the dropdown list of applications.
      */
     @Override
-    public Set<AppdynamicsApplication> getApplications() {
+    public Set<AppdynamicsApplication> getApplications(String instanceUrl) {
         Set<AppdynamicsApplication> returnSet = new HashSet<>();
         try {
-            String url = joinURL(settings.getInstanceUrl(), APPLICATION_LIST_PATH);
+            String url = joinURL(instanceUrl, APPLICATION_LIST_PATH);
             ResponseEntity<String> responseEntity = makeRestCall(url);
             String returnJSON = responseEntity.getBody();
             JSONParser parser = new JSONParser();
@@ -98,7 +98,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
                     returnSet.add(app);
                 }
             } catch (ParseException e) {
-                LOG.error("Parsing applications on instance: " + settings.getInstanceUrl(), e);
+                LOG.error("Parsing applications on instance: " + instanceUrl, e);
             }
         } catch (RestClientException rce) {
             LOG.error("client exception loading applications", rce);
@@ -116,14 +116,14 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
      * @return List of PerformanceMetrics used to populate the performance database
      */
     @Override
-    public List<PerformanceMetric> getPerformanceMetrics(AppdynamicsApplication application) {
+    public List<PerformanceMetric> getPerformanceMetrics(AppdynamicsApplication application, String instanceUrl ) {
         List<PerformanceMetric> metrics = new ArrayList<>();
 
-        metrics.addAll(getOverallMetrics(application));
+        metrics.addAll(getOverallMetrics(application, instanceUrl));
         metrics.addAll(getCalculatedMetrics(metrics));
-        metrics.addAll(getHealthMetrics(application));
-        metrics.addAll(getViolations(application));
-        metrics.addAll(getSeverityMetrics(application));
+        metrics.addAll(getHealthMetrics(application, instanceUrl));
+        metrics.addAll(getViolations(application, instanceUrl));
+        metrics.addAll(getSeverityMetrics(application, instanceUrl));
 
         return metrics;
     }
@@ -135,10 +135,10 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
      * @param application the current application. Used to provide access to appID/name
      * @return List of PerformanceMetrics used to populate the performance database
      */
-    private List<PerformanceMetric> getOverallMetrics(AppdynamicsApplication application) {
+    private List<PerformanceMetric> getOverallMetrics(AppdynamicsApplication application, String instanceUrl) {
         List<PerformanceMetric> overallMetrics = new ArrayList<>();
         try {
-            String url = joinURL(settings.getInstanceUrl(), String.format(OVERALL_METRIC_PATH, application.getAppID(), URLEncoder.encode(OVERALL_SUFFIX, "UTF-8"), String.valueOf(settings.getTimeWindow())));
+            String url = joinURL(instanceUrl, String.format(OVERALL_METRIC_PATH, application.getAppID(), URLEncoder.encode(OVERALL_SUFFIX, "UTF-8"), String.valueOf(settings.getTimeWindow())));
             ResponseEntity<String> responseEntity = makeRestCall(url);
             String returnJSON = responseEntity.getBody();
             JSONParser parser = new JSONParser();
@@ -158,7 +158,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
                     overallMetrics.add(metric);
                 }
             } catch (ParseException | RestClientException e) {
-                LOG.error("Parsing metrics for : " + settings.getInstanceUrl() + ". Application =" + application.getAppName(), e);
+                LOG.error("Parsing metrics for : " + instanceUrl + ". Application =" + application.getAppName(), e);
             }
         } catch (MalformedURLException | UnsupportedEncodingException mfe) {
             LOG.error("malformed url for loading jobs", mfe);
@@ -209,7 +209,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
      * @param application the current application. Used to provide access to appID/name
      * @return List of two PerformanceMetrics that contain info about the health percents
      */
-    private List<PerformanceMetric> getHealthMetrics(AppdynamicsApplication application) {
+    private List<PerformanceMetric> getHealthMetrics(AppdynamicsApplication application, String instanceUrl ) {
         // business health percent
         long numNodeViolations = 0;
         long numBusinessViolations = 0;
@@ -222,7 +222,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
 
         try {
             // GET NUMBER OF VIOLATIONS OF EACH TYPE
-            String url = joinURL(settings.getInstanceUrl(), String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
+            String url = joinURL(instanceUrl, String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
             ResponseEntity<String> responseEntity = makeRestCall(url);
             String returnJSON = responseEntity.getBody();
             JSONParser parser = new JSONParser();
@@ -251,7 +251,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
 
 
             // GET NUMBER OF NODES
-            url = joinURL(settings.getInstanceUrl(), String.format(NODE_LIST_PATH, application.getAppID()));
+            url = joinURL(instanceUrl, String.format(NODE_LIST_PATH, application.getAppID()));
             responseEntity = makeRestCall(url);
             returnJSON = responseEntity.getBody();
             parser = new JSONParser();
@@ -260,7 +260,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
             numNodes = array.size();
 
             // GET NUMBER OF BUSINESS TRANSACTIONS
-            url = joinURL(settings.getInstanceUrl(), String.format(BUSINESS_TRANSACTION_LIST_PATH, application.getAppID()));
+            url = joinURL(instanceUrl, String.format(BUSINESS_TRANSACTION_LIST_PATH, application.getAppID()));
             responseEntity = makeRestCall(url);
             returnJSON = responseEntity.getBody();
             parser = new JSONParser();
@@ -303,11 +303,11 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
      * @param application the current application. Used to provide access to appID/name
      * @return Single element list, value is the raw JSON object of the health violations
      */
-    private List<PerformanceMetric> getViolations(AppdynamicsApplication application) {
+    private List<PerformanceMetric> getViolations(AppdynamicsApplication application, String instanceUrl ) {
         List<PerformanceMetric> violationObjects = new ArrayList<>();
 
         try {
-            String url = joinURL(settings.getInstanceUrl(), String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
+            String url = joinURL(instanceUrl, String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
             ResponseEntity<String> responseEntity = makeRestCall(url);
             String returnJSON = responseEntity.getBody();
             JSONParser parser = new JSONParser();
@@ -339,7 +339,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
      * @param application the current application. Used to provide access to appID/name
      * @return List of two PerformanceMetrics that contain info about the severities
      */
-    private List<PerformanceMetric> getSeverityMetrics(AppdynamicsApplication application) {
+    private List<PerformanceMetric> getSeverityMetrics(AppdynamicsApplication application, String instanceUrl ) {
 
         long responseTimeSeverity = 0;
         long errorRateSeverity = 0;
@@ -348,7 +348,7 @@ public class DefaultAppdynamicsClient implements AppdynamicsClient {
 
         try {
             // NUMBER OF VIOLATIONS
-            String url = joinURL(settings.getInstanceUrl(), String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
+            String url = joinURL(instanceUrl, String.format(HEALTH_VIOLATIONS_PATH, application.getAppID()));
             ResponseEntity<String> responseEntity = makeRestCall(url);
             String returnJSON = responseEntity.getBody();
             JSONParser parser = new JSONParser();
