@@ -1,9 +1,10 @@
 package com.capitalone.dashboard.collector;
 
-import org.springframework.beans.factory.annotation.Value;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
 
 
@@ -15,8 +16,7 @@ public class AppdynamicsSettings {
     private String account;
     private String cron;
     private Integer timeWindow = 15; //default to 15 minutes
-    @Value("#{'${instance.urls}'.split(',')}")
-    private List<String> instanceUrls;
+    private String instanceUrls;
 
 
 
@@ -29,11 +29,10 @@ public class AppdynamicsSettings {
     }
 
     public List<String> getInstanceUrls() {
-
-        return instanceUrls;
+       return Arrays.asList(instanceUrls.split(","));
     }
 
-    public void setInstanceUrls(List<String> instanceUrls) {
+    public void setInstanceUrls(String instanceUrls) {
         this.instanceUrls = instanceUrls;
     }
 
