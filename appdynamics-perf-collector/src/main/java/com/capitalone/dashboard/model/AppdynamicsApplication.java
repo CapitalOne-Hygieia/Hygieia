@@ -6,6 +6,16 @@ public class AppdynamicsApplication extends CollectorItem {
     private static final String APP_ID = "appID";
     private static final String APP_DESC = "appDesc";
     private static final String APP_DASHBOARD_URL = "dashboardUrl";
+    private static final String APP_INSTANCE_ID = "instanceID"; //used to specify which instance it belongs to
+
+
+    public int getinstanceID() {
+        return (int) getOptions().get(APP_INSTANCE_ID);
+    }
+
+    public void setinstanceID(int id) {
+        getOptions().put(APP_INSTANCE_ID, id);
+    }
 
     public String getAppName() {
         return (String) getOptions().get(APP_NAME);
@@ -31,8 +41,11 @@ public class AppdynamicsApplication extends CollectorItem {
         getOptions().put(APP_DESC, desc);
     }
 
-    public void setAppDashboardUrl (String url) {getOptions().put(APP_DASHBOARD_URL, url);}
     public String getAppDashboardUrl() {return (String) getOptions().get(APP_DASHBOARD_URL);}
+
+    public void setAppDashboardUrl(String url) {
+        getOptions().put(APP_DASHBOARD_URL, url);
+    }
 
     @Override
     public boolean equals(Object o) {

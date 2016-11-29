@@ -29,10 +29,19 @@ public class CollectorItem extends BaseModel {
     private boolean pushed;
     private ObjectId collectorId;
     private long lastUpdated;
+    private int instanceID; //for appdynamics in particular
     private Map<String,Object> options = new HashMap<>();
 
     @Transient
     private Collector collector;
+
+    public int getinstanceID() {
+        return instanceID;
+    }
+
+    public void setinstanceID(int instanceID) {
+        this.instanceID = instanceID;
+    }
 
     public String getDescription() {
         return description;

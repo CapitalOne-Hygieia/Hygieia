@@ -1,15 +1,10 @@
 package com.capitalone.dashboard.collector;
 
-import com.capitalone.dashboard.model.AppdynamicsApplication;
-import com.capitalone.dashboard.model.AppdynamicsCollector;
-import com.capitalone.dashboard.model.Performance;
-import com.capitalone.dashboard.model.PerformanceMetric;
-import com.capitalone.dashboard.model.PerformanceType;
+import com.capitalone.dashboard.model.*;
 import com.capitalone.dashboard.repository.AppDynamicsApplicationRepository;
 import com.capitalone.dashboard.repository.AppdynamicsCollectorRepository;
 import com.capitalone.dashboard.repository.BaseCollectorRepository;
 import com.capitalone.dashboard.repository.PerformanceRepository;
-import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
@@ -67,25 +62,27 @@ public class AppdynamicsCollectorTask extends CollectorTask<AppdynamicsCollector
     public void collect(AppdynamicsCollector collector) {
 
         long start = System.currentTimeMillis();
-        Set<ObjectId> udId = new HashSet<>();
-        udId.add(collector.getId());
-        List<AppdynamicsApplication> existingApps = appDynamicsApplicationRepository.findByCollectorIdIn(udId);
-        List<AppdynamicsApplication> latestProjects = new ArrayList<>();
-
         List<String> instanceURLs = collector.getInstanceUrls();
+        List<Set<AppdynamicsApplication>> apps = new ArrayList<>();
+        for (int i = 0; i < instanceURLs.size(); i++)
+            apps.add(new HashSet<>());
 
+        int index = 0;
         for (String instanceURL : instanceURLs) {
 
-            logBanner(instanceURL);
+            logBanner("Instance " + index + ": " + instanceURL);
 
-            Set<AppdynamicsApplication> apps = appdynamicsClient.getApplications(instanceURL);
-            latestProjects.addAll(apps);
+            List<AppdynamicsApplication> existingApps = appDynamicsApplicationRepository.findByCollectorIdAndInstanceID(collector.getId(), index);
 
-            log("Fetched applications   " + ((apps != null) ? apps.size() : 0), start);
+            apps.get(index).addAll(appdynamicsClient.getApplications(instanceURL));
 
-            addNewProjects(apps, existingApps, collector, instanceURL);
 
-            refreshData(enabledApplications(collector), instanceURL);
+            log("Fetched applications   " + ((apps.get(index) != null) ? apps.size() : 0), start);
+
+            addNewProjects(apps.get(index), existingApps, collector, instanceURL, index);
+
+            refreshData(enabledApplications(collector, index), instanceURL);
+            index++;
         }
 
         log("Finished", start);
@@ -116,13 +113,13 @@ public class AppdynamicsCollectorTask extends CollectorTask<AppdynamicsCollector
         log("Updated", start, count);
     }
 
-    private List<AppdynamicsApplication> enabledApplications(AppdynamicsCollector collector) {
+    private List<AppdynamicsApplication> enabledApplications(AppdynamicsCollector collector, int instanceID) {
 //        return appDynamicsApplicationRepository.findEnabledAppdynamicsApplications(collector.getId());
-        return  appDynamicsApplicationRepository.findByCollectorIdAndEnabled(collector.getId(), true);
+        return appDynamicsApplicationRepository.findByCollectorIdAndEnabledAndInstanceID(collector.getId(), true, instanceID);
     }
 
 
-    private void addNewProjects(Set<AppdynamicsApplication> allApps, List<AppdynamicsApplication> exisingApps, AppdynamicsCollector collector, String instanceURL) {
+    private void addNewProjects(Set<AppdynamicsApplication> allApps, List<AppdynamicsApplication> exisingApps, AppdynamicsCollector collector, String instanceURL, int instanceID) {
         long start = System.currentTimeMillis();
         int count = 0;
         Set<AppdynamicsApplication> newApps = new HashSet<>();
@@ -132,9 +129,13 @@ public class AppdynamicsCollectorTask extends CollectorTask<AppdynamicsCollector
                 app.setCollectorId(collector.getId());
                 app.setAppDashboardUrl(String.format(appdynamicsSettings.getDashboardUrl(instanceURL),app.getAppID()));
                 app.setEnabled(false);
+                app.setinstanceID(instanceID);
+                //app.getOptions().put("instanceID", app.getinstanceID());
                 newApps.add(app);
                 count++;
             }
+
+
         }
         //save all in one shot
         if (!CollectionUtils.isEmpty(newApps)) {

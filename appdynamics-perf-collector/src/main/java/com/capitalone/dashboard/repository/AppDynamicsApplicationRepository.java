@@ -16,5 +16,9 @@ public interface AppDynamicsApplicationRepository extends BaseCollectorItemRepos
     @Query(value="{ 'collectorId' : ?0, 'enabled': true}")
     List<AppdynamicsApplication> findEnabledAppdynamicsApplications(ObjectId collectorId);
 
-    List<AppdynamicsApplication> findByCollectorIdAndEnabled(ObjectId collectorId, boolean enabled);
+    @Query(value = "{ 'collectorId' : ?0, 'instanceID': ?1}")
+    List<AppdynamicsApplication> findByCollectorIdAndInstanceID(ObjectId collectorId, int instanceID);
+
+    @Query(value = "{ 'collectorId' : ?0, 'enabled': true, 'Options.instanceID': ?2}")
+    List<AppdynamicsApplication> findByCollectorIdAndEnabledAndInstanceID(ObjectId collectorId, boolean enabled, int instanceID);
 }
